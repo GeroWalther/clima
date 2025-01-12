@@ -1,41 +1,53 @@
+//
+//  WeatherManager.swift
+//  Clima
+//
+//  Created by Gero Walther on 13/10/24.
+//  Copyright © 2024 App Brewery. All rights reserved.
+//
+
 import Foundation
 import CoreLocation
-import Combine
 
+@MainActor
 class WeatherManager: ObservableObject {
     @Published var weather: WeatherModel?
+    @Published var isLoading = false
+    @Published var error: Error?
     
     private let weatherUrl = "https://api.openweathermap.org/data/2.5/forecast?appid=32e8ebacafb05c5146276b7ff2ed55bb&units=metric"
-    private var cancellables = Set<AnyCancellable>()
     
     func fetchWeather(cityName: String) {
         let urlString = "\(weatherUrl)&q=\(cityName)"
-        performRequest(with: urlString)
+        Task {
+            await performRequest(with: urlString)
+        }
     }
     
     func fetchWeather(latitude: CLLocationDegrees, longitude: CLLocationDegrees) {
         let urlString = "\(weatherUrl)&lat=\(latitude)&lon=\(longitude)"
-        performRequest(with: urlString)
+        Task {
+            await performRequest(with: urlString)
+        }
     }
     
-    private func performRequest(with urlString: String) {
+    private func performRequest(with urlString: String) async {
         guard let url = URL(string: urlString) else { return }
         
-        URLSession.shared.dataTaskPublisher(for: url)
-            .map(\.data)
-            .decode(type: WeatherData.self, decoder: JSONDecoder())
-            .receive(on: DispatchQueue.main)
-            .sink { completion in
-                if case .failure(let error) = completion {
-                    print("Error: \(error)")
-                }
-            } receiveValue: { [weak self] decodedData in
-                self?.weather = self?.createWeatherModel(from: decodedData)
-            }
-            .store(in: &cancellables)
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let decodedData = try JSONDecoder().decode(WeatherData.self, from: data)
+            weather = createWeatherModel(from: decodedData)
+        } catch {
+            self.error = error
+            print("Error fetching weather: \(error)")
+        }
     }
     
-    private func createWeatherModel(from decodedData: WeatherData) -> WeatherModel? {
+    private func createWeatherModel(from decodedData: WeatherData) -> WeatherModel {
         // Get current weather from first item in list
         let currentWeather = decodedData.list[0]
         
@@ -78,7 +90,9 @@ class WeatherManager: ObservableObject {
             humidity: currentWeather.main.humidity,
             sunrise: Date(timeIntervalSince1970: TimeInterval(decodedData.city.sunrise)),
             sunset: Date(timeIntervalSince1970: TimeInterval(decodedData.city.sunset)),
+            precipitationChance: currentWeather.pop,
             forecast: dailyForecasts
         )
     }
 }
+
