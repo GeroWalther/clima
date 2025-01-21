@@ -72,6 +72,9 @@ struct WeatherView: View {
                 }
                 .task {
                     await locationService.requestLocationPermission()
+                    if locationService.location == nil {
+                        weatherManager.loadLastSearch()
+                    }
                 }
                 .onChange(of: locationService.location) { _ in
                     if let location = locationService.location {

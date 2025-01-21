@@ -16,9 +16,50 @@ class WeatherManager: ObservableObject {
     @Published var error: Error?
     
     private let weatherUrl = "https://api.openweathermap.org/data/2.5/forecast?appid=32e8ebacafb05c5146276b7ff2ed55bb&units=metric"
+    private let lastSearchKey = "LastWeatherSearch"
+    private let defaults = UserDefaults.standard
+    
+    private enum SearchType: String, Codable {
+        case city
+        case coordinates
+    }
+    
+    private struct LastSearch: Codable {
+        let type: SearchType
+        let cityName: String?
+        let latitude: Double?
+        let longitude: Double?
+    }
+    
+    private func saveLastSearch(type: SearchType, cityName: String? = nil, latitude: Double? = nil, longitude: Double? = nil) {
+        let search = LastSearch(type: type, cityName: cityName, latitude: latitude, longitude: longitude)
+        if let encoded = try? JSONEncoder().encode(search) {
+            defaults.set(encoded, forKey: lastSearchKey)
+        }
+    }
+    
+    func loadLastSearch() {
+        guard let data = defaults.data(forKey: lastSearchKey),
+              let lastSearch = try? JSONDecoder().decode(LastSearch.self, from: data) else {
+            return
+        }
+        
+        switch lastSearch.type {
+        case .city:
+            if let cityName = lastSearch.cityName {
+                fetchWeather(cityName: cityName)
+            }
+        case .coordinates:
+            if let latitude = lastSearch.latitude,
+               let longitude = lastSearch.longitude {
+                fetchWeather(latitude: latitude, longitude: longitude)
+            }
+        }
+    }
     
     func fetchWeather(cityName: String) {
         let urlString = "\(weatherUrl)&q=\(cityName)"
+        saveLastSearch(type: .city, cityName: cityName)
         Task {
             await performRequest(with: urlString)
         }
@@ -26,6 +67,7 @@ class WeatherManager: ObservableObject {
     
     func fetchWeather(latitude: CLLocationDegrees, longitude: CLLocationDegrees) {
         let urlString = "\(weatherUrl)&lat=\(latitude)&lon=\(longitude)"
+        saveLastSearch(type: .coordinates, latitude: latitude, longitude: longitude)
         Task {
             await performRequest(with: urlString)
         }
