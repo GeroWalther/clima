@@ -6,6 +6,7 @@ struct WeatherView: View {
     @StateObject private var locationService = LocationService.shared
     @State private var searchText = ""
     @State private var isLoading = false
+    @FocusState private var isSearchFocused: Bool
     
     var body: some View {
         Group {
@@ -30,10 +31,14 @@ struct WeatherView: View {
                                     .padding(.horizontal, 8)
                                     .background(Color.white.opacity(0.2))
                                     .cornerRadius(10)
+                                    .focused($isSearchFocused)
+                                    .onSubmit {
+                                        performSearch()
+                                    }
                                 
                                 Button {
-                                    isLoading = true
-                                    weatherManager.fetchWeather(cityName: searchText)
+                                    isSearchFocused = false  // Dismiss keyboard
+                                    performSearch()
                                 } label: {
                                     Image(systemName: "magnifyingglass")
                                         .font(.title2)
@@ -94,6 +99,12 @@ struct WeatherView: View {
                 }
             }
         }
+    }
+    
+    private func performSearch() {
+        guard !searchText.isEmpty else { return }
+        isLoading = true
+        weatherManager.fetchWeather(cityName: searchText)
     }
 }
 
